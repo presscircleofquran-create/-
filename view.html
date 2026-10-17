@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#04130F">
+<title>বই</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@400;600;700&family=Amiri+Quran&family=Tiro+Bangla:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/islamic.css">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body class="p-body">
+<main class="p-wrap" id="app"></main>
+<script type="module">
+import { db, getDoc, doc } from "./assets/firebase.js";
+import { mountBg, mountNav, requireUser, touchUser, trackRead, topHtml, setTop, titleBox, loaderHtml, msgHtml, divider, driveDl, mediaEmbed, qs, esc, cleanHtml, textToHtml, autoDir, T } from "./assets/app.js";
+
+mountBg('view'); mountNav('home');
+const app = document.getElementById('app');
+document.body.insertAdjacentHTML('afterbegin', topHtml({ title: '...', back: 'index.html' }));
+app.innerHTML = loaderHtml(3);
+const user = await requireUser(); touchUser(user);
+const bid = qs('b'), t = ['read', 'note', 'audio', 'video'].includes(qs('t')) ? qs('t') : 'read';
+const LBL = { read: 'b_btn_read', note: 'b_btn_note', audio: 'b_btn_audio', video: 'b_btn_video' };
+try {
+  if (!bid) throw new Error('no id');
+  const snap = await getDoc(doc(db, 'sub_buttons', bid));
+  if (!snap.exists() || snap.data().hidden) { app.innerHTML = msgHtml(T('b_missing'), true); throw 0; }
+  const b = snap.data();
+  document.title = b.name || 'বই'; setTop(b.name || 'বই', T(LBL[t]));
+  document.getElementById('pBack').href = 'book.html?b=' + encodeURIComponent(bid);
+  let body = '';
+  const empty = `<p style="text-align:center;opacity:.7">${esc(T('v_empty'))}</p>`;
+  if (t === 'read' || t === 'note') {
+    const html = b[t === 'read' ? 'readHtml' : 'noteHtml'] ? cleanHtml(b[t === 'read' ? 'readHtml' : 'noteHtml']) : '';
+    if (html) body = `<article class="p-paper"><div class="isl-rich p-rich" id="rich"></div></article>`;
+    else if (t === 'read' && b.pdfUrl) body = `<div class="p-box p-media">${mediaEmbed(b.pdfUrl, 'pdf')}</div><a class="p-box p-btn" target="_blank" rel="noopener" href="${esc(driveDl(b.pdfUrl))}"><span class="p-t">${esc(T('v_dl'))}</span></a>`;
+    else body = `<article class="p-paper">${empty}</article>`;
+    app.innerHTML = titleBox({ title: b.name, sub: T(LBL[t]) }) + body;
+    const rich = document.getElementById('rich'); if (rich) { rich.innerHTML = html; autoDir(rich); }
+  } else {
+    const url = b[t === 'audio' ? 'audioUrl' : 'videoUrl'];
+    body = url ? `<div class="p-box p-media">${mediaEmbed(url, t)}</div>` : `<article class="p-paper">${empty}</article>`;
+    app.innerHTML = titleBox({ title: b.name, sub: T(LBL[t]) }) + body;
+  }
+  let secName = ''; try { if (b.sectionId) { const sc = await getDoc(doc(db, 'section_buttons', b.sectionId)); if (sc.exists()) secName = [sc.data().name, sc.data().sub].filter(Boolean).join(' '); } } catch (e) {}
+  setTimeout(() => trackRead(user, { id: bid, name: b.name, sectionId: b.sectionId, sectionName: secName, homeId: b.homeId, homeName: '' }), 1500);
+} catch (err) { if (err) { console.error(err); app.innerHTML = msgHtml(T('load_err'), true); } }
+</script>
+</body>
+</html>

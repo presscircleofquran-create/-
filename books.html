@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#04130F">
+<title>বইয়ের তালিকা</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@400;600;700&family=Amiri+Quran&family=Tiro+Bangla:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/islamic.css">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body class="p-body">
+<main class="p-wrap" id="app"></main>
+<script type="module">
+import { db, collection, getDocs, getDoc, doc, setDoc, query, where } from "./assets/firebase.js";
+import { mountBg, mountNav, requireUser, touchUser, topHtml, setTop, titleBox, bookRowHtml, loaderHtml, msgHtml, emptyHtml, ICON, qs, esc, toBn, T } from "./assets/app.js";
+
+mountBg('books'); mountNav('home');
+const app = document.getElementById('app');
+document.body.insertAdjacentHTML('afterbegin', topHtml({ title: '...', back: 'index.html' }));
+app.innerHTML = loaderHtml(4);
+const user = await requireUser();
+const profile = (await touchUser(user)) || {};
+const marks = Object.assign({}, profile.doneBooks || {});
+const sid = qs('s');
+let items = [], filter = 'all', first = true;
+const pageEl = () => document.getElementById('lst');
+function draw() {
+  const done = items.filter(b => marks[b.id]).length, rest = items.length - done;
+  const shown = items.filter(b => filter === 'all' ? true : filter === 'read' ? marks[b.id] : !marks[b.id]);
+  document.getElementById('fR').innerHTML = `<span class="p-t">${esc(T('bk_read'))}</span><b>${toBn(done)}</b>`;
+  document.getElementById('fU').innerHTML = `<span class="p-t">${esc(T('bk_unread'))}</span><b>${toBn(rest)}</b>`;
+  document.getElementById('fR').classList.toggle('on', filter === 'read'); document.getElementById('fU').classList.toggle('on', filter === 'unread');
+  document.getElementById('fR').setAttribute('aria-pressed', filter === 'read'); document.getElementById('fU').setAttribute('aria-pressed', filter === 'unread');
+  pageEl().innerHTML = shown.length ? shown.map((b, i) => bookRowHtml({ label: b.name, href: 'book.html?b=' + encodeURIComponent(b.id), id: b.id, done: !!marks[b.id], i, anim: first, tip: T('bk_tick') })).join('')
+    : emptyHtml(ICON.book, items.length ? T('bk_empty_f') : T('bk_empty'));
+  first = false;
+}
+try {
+  if (!sid) throw new Error('no id');
+  const sec = await getDoc(doc(db, 'section_buttons', sid));
+  if (!sec.exists() || sec.data().hidden) throw new Error('missing');
+  const sd = sec.data(), name = sd.name || 'বই';
+  document.title = name; setTop(name, sd.sub || '');
+  if (sd.homeId) document.getElementById('pBack').href = 'section.html?h=' + encodeURIComponent(sd.homeId);
+  const snap = await getDocs(query(collection(db, 'sub_buttons'), where('sectionId', '==', sid)));
+  items = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.v === 3 && !x.hidden).sort((a, b) => (a.order || 0) - (b.order || 0));
+  app.innerHTML = titleBox({ title: name, sub: [sd.sub, items.length ? T('bk_count', { n: toBn(items.length) }) : ''].filter(Boolean).join(' · ') }) +
+    `<div class="p-filters"><button type="button" class="p-box p-fil" id="fR"></button><button type="button" class="p-box p-fil" id="fU"></button></div><div class="p-stack" id="lst"></div>`;
+  draw();
+  document.getElementById('fR').onclick = () => { filter = filter === 'read' ? 'all' : 'read'; draw(); };
+  document.getElementById('fU').onclick = () => { filter = filter === 'unread' ? 'all' : 'unread'; draw(); };
+  pageEl().addEventListener('click', async (e) => {
+    const c = e.target.closest('.p-chk'); if (!c) return;
+    e.preventDefault(); e.stopPropagation();
+    const id = c.dataset.chk, v = !marks[id]; marks[id] = v; draw();
+    try { await setDoc(doc(db, 'users', user.uid), { doneBooks: { [id]: v } }, { merge: true }); } catch (er) { console.error(er); marks[id] = !v; draw(); }
+  });
+} catch (err) { console.error(err); app.innerHTML = msgHtml(T('load_err'), true); }
+</script>
+</body>
+</html>

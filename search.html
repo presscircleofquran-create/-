@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#04130F">
+<title>খুঁজুন</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@400;600;700&family=Amiri+Quran&family=Tiro+Bangla:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/islamic.css">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body class="p-body">
+<main class="p-wrap" id="app"></main>
+<script type="module">
+import { db, collection, getDocs } from "./assets/firebase.js";
+import { mountBg, mountNav, requireUser, touchUser, titleBox, boxBtn, loaderHtml, msgHtml, emptyHtml, ICON, esc, T } from "./assets/app.js";
+
+mountBg('search'); mountNav('search');
+const app = document.getElementById('app');
+app.innerHTML = titleBox({ title: T('search_title') }) +
+  `<label class="p-search">${ICON.search}<input id="q" type="search" placeholder="${esc(T('search_ph'))}" autocomplete="off"></label><div class="p-stack" id="res">${loaderHtml(3)}</div>`;
+const user = await requireUser(); touchUser(user);
+const res = document.getElementById('res');
+let all = [];
+try {
+  const [a, b] = await Promise.all([getDocs(collection(db, 'sub_buttons')), getDocs(collection(db, 'section_buttons'))]);
+  const secs = Object.fromEntries(b.docs.filter(d => d.data().v === 3 && !d.data().hidden).map(d => [d.id, [d.data().name, d.data().sub].filter(Boolean).join(' ')]));
+  all = a.docs.filter(d => d.data().v === 3 && !d.data().hidden && secs[d.data().sectionId] !== undefined)
+    .map(d => ({ id: d.id, name: d.data().name || '', sec: secs[d.data().sectionId], author: d.data().author || '', order: d.data().order || 0 }))
+    .map(x => ({ ...x, text: x.name + ' ' + x.author + ' ' + x.sec }));
+} catch (e) { console.error(e); res.innerHTML = msgHtml(T('load_err'), true); }
+const draw = () => {
+  const t = document.getElementById('q').value.trim().toLowerCase();
+  const list = (t ? all.filter(x => x.text.toLowerCase().includes(t)) : all).slice(0, 60);
+  res.innerHTML = list.length ? list.map((x, i) => boxBtn({ label: x.name, sub: [x.sec, x.author].filter(Boolean).join(' · '), href: 'book.html?b=' + encodeURIComponent(x.id), i, anim: false })).join('')
+    : emptyHtml(ICON.search, T('search_none_t'), T('search_none_s'));
+};
+document.getElementById('q').addEventListener('input', draw); if (all.length || !res.querySelector('.p-msg')) draw();
+</script>
+</body>
+</html>
